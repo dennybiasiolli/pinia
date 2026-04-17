@@ -24,6 +24,10 @@ describe('Testing', () => {
       decrement() {
         this.n--
       },
+      doubleIncrement() {
+        this.increment()
+        this.increment()
+      },
       setValue(newValue: number) {
         this.n = newValue
       },
@@ -44,6 +48,10 @@ describe('Testing', () => {
     function decrement() {
       n.value--
     }
+    function doubleIncrement() {
+      increment()
+      increment()
+    }
     function setValue(newValue: number) {
       n.value = newValue
     }
@@ -58,6 +66,7 @@ describe('Testing', () => {
       doublePlusOne,
       increment,
       decrement,
+      doubleIncrement,
       setValue,
       $reset,
     }
@@ -151,6 +160,13 @@ describe('Testing', () => {
           expect(counter.n).toBe(17)
           expect(counter.increment).toHaveBeenCalledTimes(4)
           expect(counter.increment).toHaveBeenLastCalledWith(10)
+        })
+
+        it(`can execute internal action calls with ${name}`, () => {
+          const { counter } = factory({ stubActions: false }, useStore)
+
+          counter.doubleIncrement()
+          expect(counter.n).toBe(2)
         })
       })
     })
@@ -550,5 +566,62 @@ describe('Testing', () => {
       a: { n: 1 },
       b: { n: 0 },
     })
+  })
+
+  it('stubs inner actions in Options Store', () => {
+    const pinia = createTestingPinia({
+      stubActions: (actionName) => actionName !== 'doubleIncrement',
+      createSpy: vi.fn,
+    })
+    setActivePinia(pinia)
+
+    const counter = useCounter()
+
+    counter.doubleIncrement()
+    expect(counter.doubleIncrement).toHaveBeenCalledTimes(1)
+    expect(counter.n).toBe(0) // increment was stubbed, so state did not change
+    expect(counter.increment).toHaveBeenCalledTimes(2) // proxy intercepted both inner calls
+  })
+
+  it('can not stub inner actions called via closed-over references in Setup Store (limitation)', () => {
+    const pinia = createTestingPinia({
+      stubActions: (actionName) => actionName !== 'doubleIncrement',
+      createSpy: vi.fn,
+    })
+    setActivePinia(pinia)
+
+    const counter = useCounterSetup()
+
+    counter.doubleIncrement()
+    expect(counter.doubleIncrement).toHaveBeenCalledTimes(1)
+    expect(counter.n).toBe(2) // real increment ran twice (closed-over reference, not stubbed)
+    expect(counter.increment).toHaveBeenCalledTimes(0) // spy was never reached
+  })
+
+  it('stubs inner actions called via store proxy in Setup Store (workaround)', () => {
+    const useStore = defineStore('store', () => {
+      const n = ref(0)
+      function increment() {
+        n.value++
+      }
+      function doubleIncrementWithSelf() {
+        useStore().increment()
+        useStore().increment()
+      }
+      return { n, increment, doubleIncrementWithSelf }
+    })
+
+    const pinia = createTestingPinia({
+      stubActions: (actionName) => actionName !== 'doubleIncrementWithSelf',
+      createSpy: vi.fn,
+    })
+    setActivePinia(pinia)
+
+    const store = useStore()
+
+    store.doubleIncrementWithSelf()
+    expect(store.doubleIncrementWithSelf).toHaveBeenCalledTimes(1)
+    expect(store.n).toBe(0) // increment was stubbed, so state did not change
+    expect(store.increment).toHaveBeenCalledTimes(2) // proxy intercepted both inner calls
   })
 })

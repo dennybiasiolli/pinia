@@ -38,6 +38,12 @@ export interface TestingOptions {
    * it will **only** make the `fn` argument `undefined`. You still have to
    * handle this in `createSpy()`.
    *
+   * NOTE: in Setup stores, internal calls between actions use closed-over function
+   * references rather than the store proxy, so they cannot be intercepted by this
+   * option. Only external calls through the store instance (e.g. `useStore().increment()`)
+   * or calls via `this.increment()` inside the action will be affected. Options API
+   * stores do not have this limitation because they use `this` for internal calls.
+   *
    * @default `true`
    */
   stubActions?:
